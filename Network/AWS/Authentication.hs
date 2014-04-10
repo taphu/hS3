@@ -71,7 +71,7 @@ data S3Action =
       s3body :: L.ByteString,
       -- | Type of action, 'PUT', 'GET', etc.
       s3operation :: RequestMethod
-    } deriving (Show)
+    }
 
 -- | Transform an 'S3Action' into an HTTP request.  Does not add
 --   authentication or date information, so it is not suitable for
@@ -271,8 +271,7 @@ runAction :: S3Action -> IO (AWSResult (HTTPResponse L.ByteString))
 runAction a = runAction' a (s3Hostname a)
 
 runAction' :: S3Action -> String -> IO (AWSResult (HTTPResponse L.ByteString))
-runAction' a hostname = do
-        c <- (openTCPConnection hostname (awsPort (s3conn a)))
+runAction' a@S3Action{s3conn = AWSConnection {awsConn = c}} hostname = do
 --bufferOps = lazyBufferOp
         cd <- httpCurrentDate
         let aReq = addAuthenticationHeader a $
@@ -285,7 +284,6 @@ runAction' a hostname = do
         --case result of
         --  Left a -> print ""
         --  Right a -> print (rspBody a)
-        close c
         createAWSResult a result
 
 -- | Construct a pre-signed URI, but don't act on it.  This is useful
