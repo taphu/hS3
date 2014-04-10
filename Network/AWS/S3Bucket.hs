@@ -14,7 +14,7 @@ module Network.AWS.S3Bucket (
                createBucketIn, createBucket, createBucketWithPrefixIn,
                createBucketWithPrefix, deleteBucket, getBucketLocation,
                emptyBucket, listBuckets, listObjects, listAllObjects,
-               isBucketNameValid, getObjectStorageClass,
+               lazyListAllObjects, isBucketNameValid, getObjectStorageClass,
                getVersioningConfiguration, setVersioningConfiguration,
                -- * Data Types
                S3Bucket(S3Bucket, bucket_name, bucket_creation_date),
@@ -55,6 +55,8 @@ import Text.XML.HXT.DOM.XmlKeywords
 import Text.XML.HXT.Arrow.XmlState
 import Text.XML.HXT.Arrow.ReadDocument
 import Text.XML.HXT.DOM.TypeDefs
+
+import System.IO.Unsafe (unsafeInterleaveIO)
 
 data S3Bucket = S3Bucket { bucket_name :: String,
                            bucket_creation_date :: String
@@ -259,6 +261,25 @@ listAllObjects aws bucket lp =
                                       either (\x -> return (Left x))
                                              (\x -> return (Right (lr ++ x))) next_set
                       (False,lr) -> return (Right lr)
+
+lazyListAllObjects :: AWSConnection -- ^ AWS connection information
+               -> String -- ^ Bucket name to search
+               -> ListRequest -- ^ List parameters
+               -> IO ([ListResult]) -- ^ Server response
+lazyListAllObjects aws bucket lp = do
+    let lp_max = lp {max_keys = 1000}
+    Right res <- listObjects aws bucket lp_max
+    case res of
+        (True, lr) -> do
+            let last_result = (key . last) lr
+            next_set <- unsafeInterleaveIO $
+                lazyListAllObjects aws bucket (lp_max {marker = last_result})
+            return (lr ++ next_set)
+        (False, lr) ->
+            return lr
+
+    
+    
 
 -- | Retrieve the storage class of an object from S3.
 --   For checking more than one object's storage class efficiently,
